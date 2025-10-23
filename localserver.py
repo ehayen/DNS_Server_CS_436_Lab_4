@@ -5,38 +5,43 @@ import threading
 import time
 
 
-def handle_request():
-    # Check RR table for record
-
-    # If not found, ask the local DNS server, then save the record if valid
-    local_dns_address = ("127.0.0.1", 21000)
-
-    # The format of the DNS query and response is in the project description
-
-    # Display RR table
-    pass
-
-
-def main():
+def listen():
     try:
         while True:
-            input_value = input("Enter the hostname (or type 'quit' to exit) ")
-            if input_value.lower() == "quit":
-                break
+            # Wait for query
 
-            hostname = input_value
-            query_code = DNSTypes.get_type_code("A")
+            # Check RR table for record
 
-            # For extra credit, let users decide the query type (e.g. A, AAAA, NS, CNAME)
-            # This means input_value will be two values separated by a space
+            # If not found, ask the authoritative DNS server of the requested hostname/domain
 
-            handle_request()
+            # This means parsing the query to get the domain (e.g. amazone.com from shop.amazone.com)
+            # With the domain, you can do a self lookup to get the NS record of the domain (e.g. dns.amazone.com)
+            # With the server name, you can do a self lookup to get the IP address (e.g. 127.0.0.1)
 
+            # When sending a query to the authoritative DNS server, use port 22000
+
+            # Then save the record if valid
+            # Else, add "Record not found" in the DNS response
+
+            # The format of the DNS query and response is in the project description
+
+            # Display RR table
+            pass
     except KeyboardInterrupt:
         print("Keyboard interrupt received, exiting...")
     finally:
         # Close UDP socket
         pass
+
+
+def main():
+    # Add initial records
+    # These can be found in the test cases diagram
+
+    local_dns_address = ("127.0.0.1", 21000)
+    # Bind address to UDP socket
+
+    listen()
 
 
 def serialize():

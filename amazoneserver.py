@@ -1,42 +1,37 @@
 import errno
 import socket
 import sys
-import threading
-import time
 
 
-def handle_request():
-    # Check RR table for record
-
-    # If not found, ask the local DNS server, then save the record if valid
-    local_dns_address = ("127.0.0.1", 21000)
-
-    # The format of the DNS query and response is in the project description
-
-    # Display RR table
-    pass
-
-
-def main():
+def listen():
     try:
         while True:
-            input_value = input("Enter the hostname (or type 'quit' to exit) ")
-            if input_value.lower() == "quit":
-                break
+            # Wait for query
 
-            hostname = input_value
-            query_code = DNSTypes.get_type_code("A")
+            # Check RR table for record
 
-            # For extra credit, let users decide the query type (e.g. A, AAAA, NS, CNAME)
-            # This means input_value will be two values separated by a space
+            # If not found, add "Record not found" in the DNS response
+            # Else, return record in DNS response
 
-            handle_request()
+            # The format of the DNS query and response is in the project description
 
+            # Display RR table
+            pass
     except KeyboardInterrupt:
         print("Keyboard interrupt received, exiting...")
     finally:
         # Close UDP socket
         pass
+
+
+def main():
+    # Add initial records
+    # These can be found in the test cases diagram
+
+    amazone_dns_address = ("127.0.0.1", 22000)
+    # Bind address to UDP socket
+
+    listen()
 
 
 def serialize():
@@ -56,37 +51,15 @@ class RRTable:
         # self.records = ?
         self.record_number = 0
 
-        # Start the background thread
-        self.lock = threading.Lock()
-        self.thread = threading.Thread(target=self.__decrement_ttl, daemon=True)
-        self.thread.start()
-
     def add_record(self):
-        with self.lock:
-            pass
+        pass
 
     def get_record(self):
-        with self.lock:
-            pass
+        pass
 
     def display_table(self):
-        with self.lock:
-            # Display the table in the following format (include the column names):
-            # record_number,name,type,result,ttl,static
-            pass
-
-    def __decrement_ttl(self):
-        while True:
-            with self.lock:
-                # Decrement ttl
-                self.__remove_expired_records()
-            time.sleep(1)
-
-    def __remove_expired_records(self):
-        # This method is only called within a locked context
-
-        # Remove expired records
-        # Update record numbers
+        # Display the table in the following format (include the column names):
+        # record_number,name,type,result,ttl,static
         pass
 
 
