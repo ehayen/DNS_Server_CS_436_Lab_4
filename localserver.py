@@ -41,10 +41,10 @@ def main():
 
     local_dns_address = ("127.0.0.1", 21000)
     # Bind address to UDP socket
+    UDPConnection().bind(local_dns_address)
 
     listen()
-    recordTable = RRTable()
-    recordTable.display_table()
+    RRTable().display_table()
 
 
 def serialize():
@@ -63,14 +63,13 @@ class RRTable:
     def __init__(self):
         self.record_number = 0
         self.records = {}
+
         initialRecords = [
-            ["www.csusm.edu", "A", "144.37.5.45", "NONE", 1],
+            ["www.csusm.edu","A", "144.37.5.45", "NONE",  1],
             ["my.csusm.edu", "A", "144.37.5.150", "NONE", 1],
             ["amazone.com", "NS", "dns.amazone.com", "NONE", 1],
-            ["dns.amazone.com", "A", "127.0.0.1", "NONE", 1]
+            ["dns.amazone.com", "A", "127.0.0.1", "NONE", 1],
         ]
-
-
 
         # Start the background thread
         self.lock = threading.Lock()
@@ -81,19 +80,20 @@ class RRTable:
             self.add_record(record)
 
     def add_record(self, record):
+        name, type, result, ttl, static = record
         with self.lock:
             self.record_number += 1
-            self.records[record[0]] = {
+            self.records[name] = {
                 "number": self.record_number,
-                "type": record[1],
-                "result": record[2],
-                "ttl": record[3],
-                "static": record[4],
+                "type": type,
+                "result": result,
+                "ttl": ttl,
+                "static": static,
             }
 
     def get_record(self, name):
         with self.lock:
-            return self.records[name][2]
+            return self.records[name]["record"]
 
     def display_table(self):
         with self.lock:
@@ -114,9 +114,9 @@ class RRTable:
                 # Decrement ttl
                 removeRecordsList = []
                 for name in self.records:
-                    if self.records[name][3] == 0:
-                        self.records[name][2] -=1
-                        if self.records[name][2] == 0:
+                    if self.records[name]["static"] == 0:
+                        self.records[name]["ttl"] -=1
+                        if self.records[name]["ttl"] < 1:
                             removeRecordsList.append(name)
                 for name in removeRecordsList:
                     self.__remove_expired_records(name)
@@ -124,11 +124,12 @@ class RRTable:
 
     def __remove_expired_records(self, name):
         # This method is only called within a locked context
+        num = self.records[name]["number"]
         self.records.pop(name)
-
-        # Remove expired records
-        # Update record numbers
-        pass
+        #del self.records[name]
+        for name in self.records:
+            if self.records[name]["number"] > num:
+                self.records[name]["number"]-=1
 
 
 class DNSTypes:
