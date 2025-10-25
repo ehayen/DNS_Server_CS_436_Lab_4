@@ -4,12 +4,19 @@ import sys
 import threading
 import time
 from tabulate import tabulate
+import struct
 
 
-def listen():
+def listen(connection):
     try:
         while True:
             # Wait for query
+            message = connection.receive_message()
+
+            if message:
+                print("message received")
+            else:
+                pass
 
             # Check RR table for record
 
@@ -27,7 +34,7 @@ def listen():
             # The format of the DNS query and response is in the project description
 
             # Display RR table
-            pass
+
     except KeyboardInterrupt:
         print("Keyboard interrupt received, exiting...")
     finally:
@@ -41,17 +48,59 @@ def main():
 
     local_dns_address = ("127.0.0.1", 21000)
     # Bind address to UDP socket
-    UDPConnection().bind(local_dns_address)
+    connection = UDPConnection()
+    connection.bind(local_dns_address)
 
-    listen()
-    RRTable().display_table()
+    message = {
+        "trans_id": 24,
+        "flag": 1,
+        "query": {"name": "yahoo", "type": "A"}
+    }
+    serialize(message)
 
 
-def serialize():
-    # Consider creating a serialize function
-    # This can help prepare data to send through the socket
-    pass
+    listen(connection)
 
+
+def serialize(message: dict):
+    """
+    message has fields
+    trans_id: the unique transaction id
+    flag: query OR response
+    query:
+        name: the host name queried
+        type: the record type being requested
+    response:
+        name: the host name queried
+        type: the record type being requested
+        ttl: the TTL of the data
+        result: the requested data
+    """
+    # 32 bits for unique transaction ID
+    trans_id = int(message["trans_id"])
+    # 4 bits for query or response
+    flag_code = 0 if message["flag"] == "query" else 1
+    # pack the message header
+    header = struct.pack("!I", trans_id) + struct.pack("!B", flag_code)
+
+    if flag_code == 0:
+        # host name queried
+        name_query = message["query"]["name"].encode()
+        # 4 bits for record type
+        record_code = DNSTypes.get_type_code(message["query"]["type"])
+        # pack the query body
+        body = name_query + struct.pack("!B", record_code)
+
+    else:
+        name_response = message["response"]["name"].encode()
+        record_code = DNSTypes.get_type_code(message["response"]["type"])
+        ttl_code = message["response"]["ttl"]
+        result = message["response"]["result"].encode()
+        body = name_response + struct.pack("!B", record_code) + struct.pack("!B", ttl_code) + result
+
+
+    data = header + body
+    return data
 
 def deserialize():
     # Consider creating a deserialize function
@@ -112,13 +161,13 @@ class RRTable:
         while True:
             with self.lock:
                 # Decrement ttl
-                removeRecordsList = []
+                remove_records_list = []
                 for name in self.records:
                     if self.records[name]["static"] == 0:
                         self.records[name]["ttl"] -=1
                         if self.records[name]["ttl"] < 1:
-                            removeRecordsList.append(name)
-                for name in removeRecordsList:
+                            remove_records_list.append(name)
+                for name in remove_records_list:
                     self.__remove_expired_records(name)
             time.sleep(1)
 
