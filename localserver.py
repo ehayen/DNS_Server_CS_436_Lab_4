@@ -3,6 +3,7 @@ import socket
 import sys
 import threading
 import time
+from tabulate import tabulate
 
 
 def listen():
@@ -42,6 +43,8 @@ def main():
     # Bind address to UDP socket
 
     listen()
+    recordTable = RRTable()
+    recordTable.display_table()
 
 
 def serialize():
@@ -58,37 +61,70 @@ def deserialize():
 
 class RRTable:
     def __init__(self):
-        # self.records = ?
         self.record_number = 0
+        self.records = {}
+        initialRecords = [
+            ["www.csusm.edu", "A", "144.37.5.45", "NONE", 1],
+            ["my.csusm.edu", "A", "144.37.5.150", "NONE", 1],
+            ["amazone.com", "NS", "dns.amazone.com", "NONE", 1],
+            ["dns.amazone.com", "A", "127.0.0.1", "NONE", 1]
+        ]
+
+
 
         # Start the background thread
         self.lock = threading.Lock()
         self.thread = threading.Thread(target=self.__decrement_ttl, daemon=True)
         self.thread.start()
 
-    def add_record(self):
-        with self.lock:
-            pass
+        for record in initialRecords:
+            self.add_record(record)
 
-    def get_record(self):
+    def add_record(self, record):
         with self.lock:
-            pass
+            self.record_number += 1
+            self.records[record[0]] = {
+                "number": self.record_number,
+                "type": record[1],
+                "result": record[2],
+                "ttl": record[3],
+                "static": record[4],
+            }
+
+    def get_record(self, name):
+        with self.lock:
+            return self.records[name][2]
 
     def display_table(self):
         with self.lock:
             # Display the table in the following format (include the column names):
             # record_number,name,type,result,ttl,static
-            pass
+            headers = ["","NAME", "TYPE", "RESULT", "TTL", "STATIC"]
+            table = []
+            for name in self.records:
+                record = self.records[name]
+                row = record["number"], name, record["type"], record["result"], record["ttl"], record["static"]
+                table.append(row)
+            print(tabulate(table, headers=headers, tablefmt="plain"))
+
 
     def __decrement_ttl(self):
         while True:
             with self.lock:
                 # Decrement ttl
-                self.__remove_expired_records()
+                removeRecordsList = []
+                for name in self.records:
+                    if self.records[name][3] == 0:
+                        self.records[name][2] -=1
+                        if self.records[name][2] == 0:
+                            removeRecordsList.append(name)
+                for name in removeRecordsList:
+                    self.__remove_expired_records(name)
             time.sleep(1)
 
-    def __remove_expired_records(self):
+    def __remove_expired_records(self, name):
         # This method is only called within a locked context
+        self.records.pop(name)
 
         # Remove expired records
         # Update record numbers
