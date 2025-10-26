@@ -14,7 +14,18 @@ def listen(connection):
             message = connection.receive_message()
 
             if message:
-                print("message received")
+                pass
+                # deserialize
+                # lookup in table
+                # if not in table
+                    # query authoritative dns
+                    # listen for response
+                    # deserialize message
+                    # add to table
+                # prepare response
+                # serialize
+                # send to client
+
             else:
                 pass
 
@@ -52,11 +63,13 @@ def main():
     connection.bind(local_dns_address)
 
     message = {
-        "trans_id": 24,
-        "flag": 1,
+        "trans_id": 4856,
+        "flag": "QUERY",
         "query": {"name": "yahoo", "type": "A"}
     }
-    serialize(message)
+    print(message)
+    print(serialize(message))
+    print(deserialize(serialize(message)))
 
 
     listen(connection)
@@ -79,33 +92,78 @@ def serialize(message: dict):
     # 32 bits for unique transaction ID
     trans_id = int(message["trans_id"])
     # 4 bits for query or response
-    flag_code = 0 if message["flag"] == "query" else 1
+    flag_code = 0 if message["flag"].lower() == "query" else 1
     # pack the message header
     header = struct.pack("!I", trans_id) + struct.pack("!B", flag_code)
 
     if flag_code == 0:
+        # structure body with query
         # host name queried
-        name_query = message["query"]["name"].encode()
+        name_query = message["query"]["name"].encode() + b"\x00"
         # 4 bits for record type
         record_code = DNSTypes.get_type_code(message["query"]["type"])
         # pack the query body
         body = name_query + struct.pack("!B", record_code)
 
     else:
-        name_response = message["response"]["name"].encode()
+        #structure body with response
+        # host name queried
+        name_response = message["response"]["name"].encode() + b"\x00"
+        # record type
         record_code = DNSTypes.get_type_code(message["response"]["type"])
+        # time to live for record
         ttl_code = message["response"]["ttl"]
+        # result of lookup
         result = message["response"]["result"].encode()
-        body = name_response + struct.pack("!B", record_code) + struct.pack("!B", ttl_code) + result
-
+        # pack the response body
+        body = name_response + struct.pack("!B", record_code) + struct.pack("!I", ttl_code) + result
 
     data = header + body
     return data
 
-def deserialize():
-    # Consider creating a deserialize function
-    # This can help prepare data that is received from the socket
-    pass
+def deserialize(data):
+    # set empty dictionary to receive date
+    message = {}
+    # unpack transaction id
+    trans_id = struct.unpack("!I", data[:4])[0]
+    # unpack flag
+    flag_code = struct.unpack("!B", data[4:5])[0]
+
+    # add codes to message
+    message["trans_id"] = trans_id
+    message["flag"] = "QUERY" if flag_code == 0 else "RESPONSE"
+
+    # find the end of the name
+    # search for empty bits after flag code
+    end_of_name = data.index(b"\x00", 5)
+    # decode bits of name
+    name_query = data[5:end_of_name].decode()
+    # unpack record type
+    record_code = struct.unpack("!B", data[end_of_name+1 :end_of_name + 2])[0]
+    # lookup record type
+    record_type = DNSTypes.get_type_name(record_code)
+
+
+    if flag_code == 0:
+        # message is a query
+        # add name to dictionary
+        message["query"] = {}
+        message["query"]["name"] = name_query
+        # add record type to dictionary
+        message["query"]["type"] = record_type
+
+    else:
+        # unpack ttl
+        ttl_code = struct.unpack("!I", data[end_of_name + 2:end_of_name + 6])[0]
+        result = data[end_of_name + 6:].decode()
+        message["response"] = {}
+        message["response"]["name"] = name_query
+        message["response"]["type"] = record_type
+        message["response"]["ttl"] = ttl_code
+        message["response"]["result"] = result
+
+
+    return message
 
 
 class RRTable:
