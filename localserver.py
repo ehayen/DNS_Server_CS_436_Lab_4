@@ -3,48 +3,67 @@ import socket
 import sys
 import threading
 import time
+from ctypes import HRESULT
+
 from tabulate import tabulate
 import struct
 
 
-def listen(connection):
+def listen(connection, record_table):
     try:
+        pass
         while True:
             # Wait for query
-            message = connection.receive_message()
+            message, received_address = connection.receive_message()
+
+            # # testing insert
+            # message = {
+            #     "trans_id": 4856,
+            #     "flag": "QUERY",
+            #     "name": "shop.amazone.com",
+            #     "type": "A"
+            # }
 
             if message:
                 pass
-                # deserialize
-                # lookup in table
-                # if not in table
-                    # query authoritative dns
-                    # listen for response
-                    # deserialize message
-                    # add to table
-                # prepare response
-                # serialize
-                # send to client
+                # query case
+                if message["flag"] == "QUERY":
+                    # get record and store
+                    record = record_table.get_record(message["name"])
+
+                    # check if record does not exist in localserver
+                    if not record:
+                        # parse message to get the NS domain
+                        # split name on '.', store parts in list
+                        domain_parts = message["name"].split(".")
+                        # join last 2 list items around '.'
+                        domain_name = ".".join(domain_parts[-2:])
+
+
+                        # find authoritative server for query
+                        authoritative_server_name = record_table.get_record(domain_name)["result"]
+                        authoritative_server_address = record_table.get_record(authoritative_server_name)["result"]
+                        authoritative_server_port = record_table.get_record(authoritative_server_name)["port"]
+                        authoritative_address = (authoritative_server_address, authoritative_server_port)
+
+                        # send query to authoritative server
+                        connection.send_message(message, authoritative_address)
+
+                        # receive response from authoritative server
+                        response = connection.receive_message()[0]
+
+                        # add response to record table
+                        record_table.add_record(response)
+
+                    # get record from table
+                    record = record_table.get_record(message["name"])
+                    record_table.display_table()
+
+                    connection.send_message(record, received_address)
 
             else:
                 pass
 
-            # Check RR table for record
-
-            # If not found, ask the authoritative DNS server of the requested hostname/domain
-
-            # This means parsing the query to get the domain (e.g. amazone.com from shop.amazone.com)
-            # With the domain, you can do a self lookup to get the NS record of the domain (e.g. dns.amazone.com)
-            # With the server name, you can do a self lookup to get the IP address (e.g. 127.0.0.1)
-
-            # When sending a query to the authoritative DNS server, use port 22000
-
-            # Then save the record if valid
-            # Else, add "Record not found" in the DNS response
-
-            # The format of the DNS query and response is in the project description
-
-            # Display RR table
 
     except KeyboardInterrupt:
         print("Keyboard interrupt received, exiting...")
@@ -54,25 +73,53 @@ def listen(connection):
 
 
 def main():
-    # Add initial records
-    # These can be found in the test cases diagram
+    initial_records = [
+        {"name": "www.csusm.edu", "type": "A", "result": "144.37.5.45", "ttl": "NONE", "static": 1},
+        {"name": "my.csusm.edu", "type": "A", "result": "144.37.5.150", "ttl": "NONE", "static": 1},
+        {"name": "amazone.com", "type": "NS", "result": "dns.amazone.com","ttl": "NONE", "static": 1},
+        {"name": "dns.amazone.com", "type": "A", "result": "127.0.0.1", "port": 22000, "ttl": "NONE", "static": 1},
+    ]
+    # initialize table to hold DNS records
+    record_table = RRTable()
 
+    # Add initial records
+    for record in initial_records:
+        record_table.add_record(record)
+
+    # set address and socket for this server
     local_dns_address = ("127.0.0.1", 21000)
     # Bind address to UDP socket
     connection = UDPConnection()
     connection.bind(local_dns_address)
 
-    message = {
+    # build testing
+    query_message = {
         "trans_id": 4856,
         "flag": "QUERY",
-        "query": {"name": "yahoo", "type": "A"}
+        "name": "yahoo",
+        "type": "A"
     }
-    print(message)
-    print(serialize(message))
-    print(deserialize(serialize(message)))
+    response_message = {
+        "trans_id": 4857,
+        "flag": "RESPONSE",
+        "name": "yahoo",
+        "type": "A",
+        "ttl" : 60,
+        "result": "125.134.1.1"
+    }
 
+###########TESTING CASES############
+    #print(query_message)
+    #print(serialize(query_message))
+    #print(deserialize(serialize(query_message)))
 
-    listen(connection)
+    #print(response_message)
+    #print(serialize(response_message))
+    #print(deserialize(serialize(response_message)))
+######################################
+
+    # Start socket
+    listen(connection, record_table)
 
 
 def serialize(message: dict):
@@ -80,14 +127,10 @@ def serialize(message: dict):
     message has fields
     trans_id: the unique transaction id
     flag: query OR response
-    query:
-        name: the host name queried
-        type: the record type being requested
-    response:
-        name: the host name queried
-        type: the record type being requested
-        ttl: the TTL of the data
-        result: the requested data
+    name: the host name queried
+    type: the record type being requested
+    (if response) ttl: the TTL of the data
+    (if response) result: the requested data
     """
     # 32 bits for unique transaction ID
     trans_id = int(message["trans_id"])
@@ -96,27 +139,23 @@ def serialize(message: dict):
     # pack the message header
     header = struct.pack("!I", trans_id) + struct.pack("!B", flag_code)
 
-    if flag_code == 0:
-        # structure body with query
-        # host name queried
-        name_query = message["query"]["name"].encode() + b"\x00"
-        # 4 bits for record type
-        record_code = DNSTypes.get_type_code(message["query"]["type"])
-        # pack the query body
-        body = name_query + struct.pack("!B", record_code)
+    # structure body
+    # host name queried
+    name_query = message["name"].encode() + b"\x00"
+    # 4 bits for record type
+    record_code = DNSTypes.get_type_code(message["type"])
+    # pack the query body
+    body = name_query + struct.pack("!B", record_code)
 
-    else:
-        #structure body with response
-        # host name queried
-        name_response = message["response"]["name"].encode() + b"\x00"
-        # record type
-        record_code = DNSTypes.get_type_code(message["response"]["type"])
-        # time to live for record
-        ttl_code = message["response"]["ttl"]
+    if flag_code == 1:
+        # added response structure
+        # time to live for record - default send 60
+        ttl_code = 60
         # result of lookup
-        result = message["response"]["result"].encode()
+        result = message["result"].encode() + b"\x00"
         # pack the response body
-        body = name_response + struct.pack("!B", record_code) + struct.pack("!I", ttl_code) + result
+        response_body = struct.pack("!I", ttl_code) + result
+        body += response_body
 
     data = header + body
     return data
@@ -138,29 +177,22 @@ def deserialize(data):
     end_of_name = data.index(b"\x00", 5)
     # decode bits of name
     name_query = data[5:end_of_name].decode()
+    # add name to message
+    message["name"] = name_query
+
     # unpack record type
     record_code = struct.unpack("!B", data[end_of_name+1 :end_of_name + 2])[0]
     # lookup record type
     record_type = DNSTypes.get_type_name(record_code)
+    # add record type to message
+    message["type"] = record_type
 
-
-    if flag_code == 0:
-        # message is a query
-        # add name to dictionary
-        message["query"] = {}
-        message["query"]["name"] = name_query
-        # add record type to dictionary
-        message["query"]["type"] = record_type
-
-    else:
+    if flag_code == 1:
         # unpack ttl
         ttl_code = struct.unpack("!I", data[end_of_name + 2:end_of_name + 6])[0]
         result = data[end_of_name + 6:].decode()
-        message["response"] = {}
-        message["response"]["name"] = name_query
-        message["response"]["type"] = record_type
-        message["response"]["ttl"] = ttl_code
-        message["response"]["result"] = result
+        message["ttl"] = ttl_code
+        message["result"] = result
 
 
     return message
@@ -171,36 +203,30 @@ class RRTable:
         self.record_number = 0
         self.records = {}
 
-        initialRecords = [
-            ["www.csusm.edu","A", "144.37.5.45", "NONE",  1],
-            ["my.csusm.edu", "A", "144.37.5.150", "NONE", 1],
-            ["amazone.com", "NS", "dns.amazone.com", "NONE", 1],
-            ["dns.amazone.com", "A", "127.0.0.1", "NONE", 1],
-        ]
-
         # Start the background thread
         self.lock = threading.Lock()
         self.thread = threading.Thread(target=self.__decrement_ttl, daemon=True)
         self.thread.start()
 
-        for record in initialRecords:
-            self.add_record(record)
-
     def add_record(self, record):
-        name, type, result, ttl, static = record
+        """
+        record = {
+            name : the host name queried
+            type : the record type being requested
+            ttl : the TTL of the data
+            result : the requested data
+        """
         with self.lock:
             self.record_number += 1
-            self.records[name] = {
-                "number": self.record_number,
-                "type": type,
-                "result": result,
-                "ttl": ttl,
-                "static": static,
-            }
+            record["record_number"] = self.record_number
+            self.records[record["name"]] = record
 
     def get_record(self, name):
         with self.lock:
-            return self.records[name]["record"]
+            if name in self.records:
+                return self.records[name]
+            else:
+                return None
 
     def display_table(self):
         with self.lock:
@@ -210,7 +236,7 @@ class RRTable:
             table = []
             for name in self.records:
                 record = self.records[name]
-                row = record["number"], name, record["type"], record["result"], record["ttl"], record["static"]
+                row = record["record_number"], name, record["type"], record["result"], record["ttl"], record["static"]
                 table.append(row)
             print(tabulate(table, headers=headers, tablefmt="plain"))
 
@@ -220,23 +246,22 @@ class RRTable:
             with self.lock:
                 # Decrement ttl
                 remove_records_list = []
-                for name in self.records:
-                    if self.records[name]["static"] == 0:
-                        self.records[name]["ttl"] -=1
-                        if self.records[name]["ttl"] < 1:
-                            remove_records_list.append(name)
+                for record in self.records.values():
+                    if record["static"] == 0:
+                        record["ttl"] -=1
+                        if record["ttl"] < 1:
+                            remove_records_list.append(record["name"])
                 for name in remove_records_list:
                     self.__remove_expired_records(name)
             time.sleep(1)
 
     def __remove_expired_records(self, name):
         # This method is only called within a locked context
-        num = self.records[name]["number"]
+        num = self.records[name]["record_number"]
         self.records.pop(name)
-        #del self.records[name]
-        for name in self.records:
-            if self.records[name]["number"] > num:
-                self.records[name]["number"]-=1
+        for record in self.records.values():
+            if record["record_number"] > num:
+                record["record_number"]-=1
 
 
 class DNSTypes:
@@ -279,9 +304,9 @@ class UDPConnection:
         self.socket.settimeout(timeout)
         self.is_bound = False
 
-    def send_message(self, message: str, address: tuple[str, int]):
+    def send_message(self, message, address: tuple[str, int]):
         """Sends a message to the specified address."""
-        self.socket.sendto(message.encode(), address)
+        self.socket.sendto(serialize(message), address)
 
     def receive_message(self):
         """
@@ -296,7 +321,7 @@ class UDPConnection:
         while True:
             try:
                 data, address = self.socket.recvfrom(4096)
-                return data.decode(), address
+                return deserialize(data), address
             except socket.timeout:
                 continue
             except OSError as e:
