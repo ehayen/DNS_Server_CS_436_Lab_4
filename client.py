@@ -3,21 +3,45 @@ import socket
 import sys
 import threading
 import time
-
-
-def handle_request():
+import struct
+from tabulate import tabulate
+def handle_request(hostname: str, query_code: int, records: "RRTable", num: int):
     # Check RR table for record
-
-    # If not found, ask the local DNS server, then save the record if valid
-    local_dns_address = ("127.0.0.1", 21000)
-
+    if(records.get_record(hostname) == None):
+        # If not found, ask the local DNS server, then save the record if valid
+        local_dns_address = ("127.0.0.1", 21000)
+        num = num + 1
+        connection = UDPConnection()
+        
+        dataq = {
+            "trans_id":0x00000000, #should be unique, but just for testing
+            "flag": "QUERY",
+            "name": hostname,
+            "type": DNSTypes.get_type_name(query_code)}
+        
+        data = serialize(dataq)
+        connection.socket.sendto(data, local_dns_address) 
+        response,address = connection.socket.recvfrom(4096)
+        data_back = deserialize(response)
+        print(data_back)
+        record_back = {
+            "name": data_back["name"],
+            "type": data_back["type"],
+            "result": data_back["result"],
+            "ttl": data_back.get("ttl","NONE"),
+            "static":data_back.get("static",0)
+        }
+        records.add_record(record_back)
     # The format of the DNS query and response is in the project description
 
     # Display RR table
+    records.display_table()
     pass
 
 
 def main():
+    records = RRTable()
+    num = 0
     try:
         while True:
             input_value = input("Enter the hostname (or type 'quit' to exit) ")
@@ -30,7 +54,7 @@ def main():
             # For extra credit, let users decide the query type (e.g. A, AAAA, NS, CNAME)
             # This means input_value will be two values separated by a space
 
-            handle_request()
+            handle_request(hostname,query_code,records, num)
 
     except KeyboardInterrupt:
         print("Keyboard interrupt received, exiting...")
@@ -39,56 +63,145 @@ def main():
         pass
 
 
-def serialize():
-    # Consider creating a serialize function
-    # This can help prepare data to send through the socket
-    pass
+def serialize(message: dict):
+    """
+    message has fields
+    trans_id: the unique transaction id
+    flag: query OR response
+    name: the host name queried
+    type: the record type being requested
+    (if response) ttl: the TTL of the data
+    (if response) result: the requested data
+    """
+    # 32 bits for unique transaction ID
+    trans_id = int(message["trans_id"])
+    # 4 bits for query or response
+    flag_code = 0 if message["flag"].lower() == "query" else 1
+    # pack the message header
+    header = struct.pack("!I", trans_id) + struct.pack("!B", flag_code)
+
+    # structure body
+    # host name queried
+    name_query = message["name"].encode() + b"\x00"
+    # 4 bits for record type
+    record_code = DNSTypes.get_type_code(message["type"])
+    # pack the query body
+    body = name_query + struct.pack("!B", record_code)
+
+    if flag_code == 1:
+        # added response structure
+        # time to live for record - default send 60
+        ttl_code = 60
+        # result of lookup
+        result = message["result"].encode() + b"\x00"
+        # pack the response body
+        response_body = struct.pack("!I", ttl_code) + result
+        body += response_body
+
+    data = header + body
+    return data
+
+def deserialize(data):
+    # set empty dictionary to receive date
+    message = {}
+    # unpack transaction id
+    trans_id = struct.unpack("!I", data[:4])[0]
+    # unpack flag
+    flag_code = struct.unpack("!B", data[4:5])[0]
+
+    # add codes to message
+    message["trans_id"] = trans_id
+    message["flag"] = "QUERY" if flag_code == 0 else "RESPONSE"
+
+    # find the end of the name
+    # search for empty bits after flag code
+    end_of_name = data.index(b"\x00", 5)
+    # decode bits of name
+    name_query = data[5:end_of_name].decode()
+    # add name to message
+    message["name"] = name_query
+
+    # unpack record type
+    record_code = struct.unpack("!B", data[end_of_name+1 :end_of_name + 2])[0]
+    # lookup record type
+    record_type = DNSTypes.get_type_name(record_code)
+    # add record type to message
+    message["type"] = record_type
+
+    if flag_code == 1:
+        # unpack ttl
+        ttl_code = struct.unpack("!I", data[end_of_name + 2:end_of_name + 6])[0]
+        result = data[end_of_name + 6:].decode()
+        message["ttl"] = ttl_code
+        message["result"] = result
 
 
-def deserialize():
-    # Consider creating a deserialize function
-    # This can help prepare data that is received from the socket
-    pass
-
+    return message
 
 class RRTable:
     def __init__(self):
-        # self.records = ?
         self.record_number = 0
+        self.records = {}
 
         # Start the background thread
         self.lock = threading.Lock()
         self.thread = threading.Thread(target=self.__decrement_ttl, daemon=True)
         self.thread.start()
 
-    def add_record(self):
+    def add_record(self, record):
+        """
+        record = {
+            name : the host name queried
+            type : the record type being requested
+            ttl : the TTL of the data
+            result : the requested data
+        """
         with self.lock:
-            pass
+            self.record_number += 1
+            record["record_number"] = self.record_number
+            self.records[record["name"]] = record
 
-    def get_record(self):
+    def get_record(self, name):
         with self.lock:
-            pass
+            if name in self.records:
+                return self.records[name]
+            else:
+                return None
 
     def display_table(self):
         with self.lock:
             # Display the table in the following format (include the column names):
             # record_number,name,type,result,ttl,static
-            pass
+            headers = ["","NAME", "TYPE", "RESULT", "TTL", "STATIC"]
+            table = []
+            for name in self.records:
+                record = self.records[name]
+                row = record["record_number"], name, record["type"], record["result"], record["ttl"], record["static"]
+                table.append(row)
+            print(tabulate(table, headers=headers, tablefmt="plain"))
+
 
     def __decrement_ttl(self):
         while True:
             with self.lock:
                 # Decrement ttl
-                self.__remove_expired_records()
+                remove_records_list = []
+                for record in self.records.values():
+                    if record["static"] == 0:
+                        record["ttl"] -=1
+                        if record["ttl"] < 1:
+                            remove_records_list.append(record["name"])
+                for name in remove_records_list:
+                    self.__remove_expired_records(name)
             time.sleep(1)
 
-    def __remove_expired_records(self):
+    def __remove_expired_records(self, name):
         # This method is only called within a locked context
-
-        # Remove expired records
-        # Update record numbers
-        pass
-
+        num = self.records[name]["record_number"]
+        self.records.pop(name)
+        for record in self.records.values():
+            if record["record_number"] > num:
+                record["record_number"]-=1
 
 class DNSTypes:
     """
