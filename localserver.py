@@ -3,7 +3,7 @@ import socket
 import sys
 import threading
 import time
-from ctypes import HRESULT
+
 
 from tabulate import tabulate
 import struct
