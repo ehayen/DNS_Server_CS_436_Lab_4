@@ -4,7 +4,6 @@ import sys
 import threading
 import time
 
-
 from tabulate import tabulate
 import struct
 
@@ -25,14 +24,18 @@ def listen(connection, record_table):
             # }
 
             if message:
-                pass
                 # query case
                 if message["flag"] == "QUERY":
                     # get record and store
+                    print("Attempting to fetch record for: " + message["name"])
                     record = record_table.get_record(message["name"])
 
+                    # test print
+                    #print(record)
+
                     # check if record does not exist in localserver
-                    if not record:
+                    if not record or not record["type"] == 'A':
+                        print("Record not found. Contacting Authoritative server.", flush = True)
                         # parse message to get the NS domain
                         # split name on '.', store parts in list
                         domain_parts = message["name"].split(".")
@@ -52,24 +55,25 @@ def listen(connection, record_table):
                         # receive response from authoritative server
                         response = connection.receive_message()[0]
 
+                        response["static"] = 0
+
                         # add response to record table
                         record_table.add_record(response)
 
                     # get record from table
                     record = record_table.get_record(message["name"])
+                    record["trans_id"] = message["trans_id"]
+                    record["flag"] = "RESPONSE"
+
                     record_table.display_table()
 
                     connection.send_message(record, received_address)
 
-            else:
-                pass
-
-
     except KeyboardInterrupt:
         print("Keyboard interrupt received, exiting...")
     finally:
-        # Close UDP socket
-        pass
+        print("Closing connection...")
+        connection.close()
 
 
 def main():
@@ -238,7 +242,10 @@ class RRTable:
                 record = self.records[name]
                 row = record["record_number"], name, record["type"], record["result"], record["ttl"], record["static"]
                 table.append(row)
-            print(tabulate(table, headers=headers, tablefmt="plain"))
+            print("\n")
+            print(tabulate(table, headers=headers, tablefmt="plain"),flush=True)
+            print("\n")
+
 
 
     def __decrement_ttl(self):
