@@ -21,7 +21,7 @@ def handle_request(hostname: str, query_code: int, records: "RRTable", num: int,
             "name": hostname,
             "type": DNSTypes.get_type_name(query_code)
         }
-        print(message["trans_id"])
+        #print(message["trans_id"])
         # test prints
         #print(dataq)
         #print(serialize(dataq))
