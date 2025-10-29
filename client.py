@@ -4,6 +4,7 @@ import sys
 import threading
 import time
 import struct
+import random
 from tabulate import tabulate
 def handle_request(hostname: str, query_code: int, records: "RRTable", num: int, connection):
     # Check RR table for record
@@ -15,12 +16,12 @@ def handle_request(hostname: str, query_code: int, records: "RRTable", num: int,
         connection = connection
         
         message = {
-            "trans_id":0x00000000, #should be unique, but just for testing
+            "trans_id":random.getrandbits(32), #Unique randomly generated 32 bit transaction id
             "flag": "QUERY",
             "name": hostname,
             "type": DNSTypes.get_type_name(query_code)
         }
-
+        print(message["trans_id"])
         # test prints
         #print(dataq)
         #print(serialize(dataq))
