@@ -5,44 +5,55 @@ import threading
 import time
 import struct
 from tabulate import tabulate
-def handle_request(hostname: str, query_code: int, records: "RRTable", num: int):
+def handle_request(hostname: str, query_code: int, records: "RRTable", num: int, connection):
     # Check RR table for record
     if(records.get_record(hostname) == None):
         # If not found, ask the local DNS server, then save the record if valid
         local_dns_address = ("127.0.0.1", 21000)
+
         num = num + 1
-        connection = UDPConnection()
+        connection = connection
         
-        dataq = {
+        message = {
             "trans_id":0x00000000, #should be unique, but just for testing
             "flag": "QUERY",
             "name": hostname,
-            "type": DNSTypes.get_type_name(query_code)}
-        
-        data = serialize(dataq)
-        connection.socket.sendto(data, local_dns_address) 
-        response,address = connection.socket.recvfrom(4096)
-        data_back = deserialize(response)
-        print(data_back)
+            "type": DNSTypes.get_type_name(query_code)
+        }
+
+        # test prints
+        #print(dataq)
+        #print(serialize(dataq))
+
+
+        connection.send_message(message, local_dns_address)
+        response, address = connection.receive_message()
+
+
         record_back = {
-            "name": data_back["name"],
-            "type": data_back["type"],
-            "result": data_back["result"],
-            "ttl": data_back.get("ttl","NONE"),
-            "static":data_back.get("static",0)
+            "name": response["name"],
+            "type": response["type"],
+            "result": response["result"],
+            "ttl": response["ttl"],
+            "static" : 0
         }
         records.add_record(record_back)
     # The format of the DNS query and response is in the project description
 
     # Display RR table
     records.display_table()
-    pass
 
 
 def main():
     records = RRTable()
     num = 0
+    client_address = ("127.0.0.1", 4096)
+
     try:
+
+        connection = UDPConnection()
+        connection.bind(client_address)
+
         while True:
             input_value = input("Enter the hostname (or type 'quit' to exit) ")
             if input_value.lower() == "quit":
@@ -54,12 +65,12 @@ def main():
             # For extra credit, let users decide the query type (e.g. A, AAAA, NS, CNAME)
             # This means input_value will be two values separated by a space
 
-            handle_request(hostname,query_code,records, num)
+            handle_request(hostname,query_code,records, num, connection)
 
     except KeyboardInterrupt:
         print("Keyboard interrupt received, exiting...")
     finally:
-        # Close UDP socket
+        connection.close()
         pass
 
 
@@ -178,7 +189,10 @@ class RRTable:
                 record = self.records[name]
                 row = record["record_number"], name, record["type"], record["result"], record["ttl"], record["static"]
                 table.append(row)
+            print("\n")
             print(tabulate(table, headers=headers, tablefmt="plain"))
+            print("\n")
+
 
 
     def __decrement_ttl(self):
@@ -243,9 +257,9 @@ class UDPConnection:
         self.socket.settimeout(timeout)
         self.is_bound = False
 
-    def send_message(self, message: str, address: tuple[str, int]):
+    def send_message(self, message, address: tuple[str, int]):
         """Sends a message to the specified address."""
-        self.socket.sendto(message.encode(), address)
+        self.socket.sendto(serialize(message), address)
 
     def receive_message(self):
         """
@@ -260,7 +274,7 @@ class UDPConnection:
         while True:
             try:
                 data, address = self.socket.recvfrom(4096)
-                return data.decode(), address
+                return deserialize(data), address
             except socket.timeout:
                 continue
             except OSError as e:
