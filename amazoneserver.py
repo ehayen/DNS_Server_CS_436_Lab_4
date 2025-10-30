@@ -2,6 +2,7 @@ import errno
 import socket
 import struct
 import sys
+import time
 
 from tabulate import tabulate
 
@@ -9,6 +10,7 @@ from tabulate import tabulate
 def listen(connection, record_table):
     try:
         while True:
+
             print("Waiting for message...", flush=True)
             # Wait for query
             message, received_address = connection.receive_message()
@@ -25,6 +27,8 @@ def listen(connection, record_table):
                 print("Record found for " + message["name"], flush=True)
                 record["trans_id"] = message["trans_id"]
                 record["flag"] = "RESPONSE"
+                # add sleep to simulate latency of network delays
+                time.sleep(.5)
                 connection.send_message(record, received_address)
                 record_table.display_table()
 
@@ -51,11 +55,22 @@ def main():
     connection = UDPConnection()
 
     # address and port to use for this server
-    amazone_dns_address = ("127.0.0.1", 22000)
+    amazone_dns_address = (get_local_ip(), 22000)
     # Bind address to UDP socket
     connection.bind(amazone_dns_address)
 
     listen(connection, record_table)
+
+
+def get_local_ip():
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
 
 
 def serialize(message: dict):

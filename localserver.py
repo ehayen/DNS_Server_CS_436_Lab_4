@@ -51,6 +51,7 @@ def listen(connection, record_table):
 
                         # send query to authoritative server
                         connection.send_message(message, authoritative_address)
+                        
 
                         # receive response from authoritative server
                         response = connection.receive_message()[0]
@@ -81,7 +82,7 @@ def main():
         {"name": "www.csusm.edu", "type": "A", "result": "144.37.5.45", "ttl": "NONE", "static": 1},
         {"name": "my.csusm.edu", "type": "A", "result": "144.37.5.150", "ttl": "NONE", "static": 1},
         {"name": "amazone.com", "type": "NS", "result": "dns.amazone.com","ttl": "NONE", "static": 1},
-        {"name": "dns.amazone.com", "type": "A", "result": "127.0.0.1", "port": 22000, "ttl": "NONE", "static": 1},
+        {"name": "dns.amazone.com", "type": "A", "result": get_local_ip(), "port": 22000, "ttl": "NONE", "static": 1},
     ]
     # initialize table to hold DNS records
     record_table = RRTable()
@@ -91,7 +92,8 @@ def main():
         record_table.add_record(record)
 
     # set address and socket for this server
-    local_dns_address = ("127.0.0.1", 21000)
+    print(get_local_ip())
+    local_dns_address = (get_local_ip(), 21000)
     # Bind address to UDP socket
     connection = UDPConnection()
     connection.bind(local_dns_address)
@@ -124,6 +126,17 @@ def main():
 
     # Start socket
     listen(connection, record_table)
+
+
+def get_local_ip():
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
 
 
 def serialize(message: dict):

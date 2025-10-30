@@ -10,7 +10,7 @@ def handle_request(hostname: str, query_code: int, records: "RRTable", num: int,
     # Check RR table for record
     if(records.get_record(hostname) == None):
         # If not found, ask the local DNS server, then save the record if valid
-        local_dns_address = ("127.0.0.1", 21000)
+        local_dns_address = (get_local_ip(), 21000)
 
         num = num + 1
         connection = connection
@@ -48,7 +48,7 @@ def handle_request(hostname: str, query_code: int, records: "RRTable", num: int,
 def main():
     records = RRTable()
     num = 0
-    client_address = ("127.0.0.1", 4096)
+    client_address = (get_local_ip(), 4096)
 
     try:
 
@@ -73,6 +73,16 @@ def main():
     finally:
         connection.close()
         pass
+
+def get_local_ip():
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
 
 
 def serialize(message: dict):
