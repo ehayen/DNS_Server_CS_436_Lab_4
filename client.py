@@ -58,7 +58,7 @@ def main():
         while True:
             input_value = input("Enter the hostname (or type 'quit' to exit) ")
             if input_value.lower() == "quit":
-                sys.exit()
+                break
 
             hostname = input_value
             query_code = DNSTypes.get_type_code("A")
