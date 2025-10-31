@@ -27,16 +27,19 @@ def handle_request(hostname: str, query_code: int, records: "RRTable", num: int,
 
         connection.send_message(message, local_dns_address)
         response, address = connection.receive_message()
-
-
-        record_back = {
-            "name": response["name"],
-            "type": response["type"],
-            "result": response["result"],
-            "ttl": response["ttl"],
-            "static" : 0
-        }
-        records.add_record(record_back)
+        #print(repr(response["result"]))
+        if(response["result"].rstrip('\x00') == "NXDOMAIN"): #check to see if its a non-existant domain. remove null termator
+            print("Record Not Found")
+            
+        else:
+            record_back = {
+                "name": response["name"],
+                "type": response["type"],
+                "result": response["result"],
+                "ttl": response["ttl"],
+                "static" : 0
+            }
+            records.add_record(record_back)
     # The format of the DNS query and response is in the project description
 
     # Display RR table
