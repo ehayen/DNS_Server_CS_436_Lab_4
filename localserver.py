@@ -44,19 +44,22 @@ def listen(connection, record_table):
 
 
                         # find authoritative server for query
-                        authoritative_server_name = record_table.get_record(domain_name)["result"]
-                        authoritative_server_address = record_table.get_record(authoritative_server_name)["result"]
-                        authoritative_server_port = record_table.get_record(authoritative_server_name)["port"]
-                        authoritative_address = (authoritative_server_address, authoritative_server_port)
+                        if record_table.get_record(domain_name) == None:
+                            response = {"name": message["name"], "type": "A", "result": "NXDOMAIN", "ttl": "NONE", "static": 1}
+                        else:
+                            authoritative_server_name = record_table.get_record(domain_name)["result"]
+                            authoritative_server_address = record_table.get_record(authoritative_server_name)["result"]
+                            authoritative_server_port = record_table.get_record(authoritative_server_name)["port"]
+                            authoritative_address = (authoritative_server_address, authoritative_server_port)
 
-                        # send query to authoritative server
-                        connection.send_message(message, authoritative_address)
-                        
+                            # send query to authoritative server
+                            connection.send_message(message, authoritative_address)
+                            
 
-                        # receive response from authoritative server
-                        response = connection.receive_message()[0]
+                            # receive response from authoritative server
+                            response = connection.receive_message()[0]
 
-                        response["static"] = 0
+                            response["static"] = 0
 
                         # add response to record table
                         record_table.add_record(response)

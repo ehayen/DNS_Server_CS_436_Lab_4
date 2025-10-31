@@ -12,10 +12,8 @@ def handle_request(hostname: str, query_code: int, records: "RRTable", num: int,
         # If not found, ask the local DNS server, then save the record if valid
         local_dns_address = (get_local_ip(), 21000)
 
-        num = num + 1
-        connection = connection
         
-        message = {
+        message = { 
             "trans_id":random.getrandbits(32), #Unique randomly generated 32 bit transaction id
             "flag": "QUERY",
             "name": hostname,
