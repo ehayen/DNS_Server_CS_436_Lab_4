@@ -15,8 +15,6 @@ def listen(connection, record_table):
             # Wait for query
             message, received_address = connection.receive_message()
 
-            # Check RR table for record
-            print("Attempting to fetch record for: " + message["name"], flush=True)
 
             record = record_table.get_record(message["name"])
 

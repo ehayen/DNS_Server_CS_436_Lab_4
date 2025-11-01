@@ -20,13 +20,9 @@ def listen(sock, spoof):
             spoof["trans_id"] = message["trans_id"]
             spoof_message = serialize(spoof)
             sock.sendto(spoof_message, (get_local_ip(), 21000))
-            print("Sent spoof: {}".format(spoof_message))
     except KeyboardInterrupt:
         sock.close()
-
-
-
-
+        sys.exit()
 
 
 def main():
@@ -156,57 +152,6 @@ class DNSTypes:
     def get_type_name(type_code: int):
         """Gets the DNS query type name for the given code, or None"""
         return DNSTypes.code_to_name.get(type_code, None)
-
-class UDPConnection:
-        """A class to handle UDP socket communication, capable of acting as both a client and a server."""
-
-        def __init__(self, timeout: int = 1):
-            """Initializes the UDPConnection instance with a timeout. Defaults to 1."""
-            self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            self.socket.settimeout(timeout)
-            self.is_bound = False
-
-        def send_message(self, message, address: tuple[str, int]):
-            """Sends a message to the specified address."""
-            self.socket.sendto(serialize(message), address)
-
-        def receive_message(self):
-            """
-            Receives a message from the socket.
-
-            Returns:
-                tuple (data, address): The received message and the address it came from.
-
-            Raises:
-                KeyboardInterrupt: If the program is interrupted manually.
-            """
-            while True:
-                try:
-                    data, address = self.socket.recvfrom(4096)
-                    return deserialize(data), address
-                except socket.timeout:
-                    continue
-                except OSError as e:
-                    if e.errno == errno.ECONNRESET:
-                        print("Error: Unable to reach the other socket. It might not be up and running.")
-                    else:
-                        print(f"Socket error: {e}")
-                    self.close()
-                    sys.exit(1)
-                except KeyboardInterrupt:
-                    raise
-
-        def bind(self, address: tuple[str, int]):
-            """Binds the socket to the given address. This means it will be a server."""
-            if self.is_bound:
-                print(f"Socket is already bound to address: {self.socket.getsockname()}")
-                return
-            self.socket.bind(address)
-            self.is_bound = True
-
-        def close(self):
-            """Closes the UDP socket."""
-            self.socket.close()
 
 
 if __name__ == "__main__":

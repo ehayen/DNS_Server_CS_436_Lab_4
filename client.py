@@ -19,15 +19,11 @@ def handle_request(hostname: str, query_code: int, records: "RRTable", num: int,
             "name": hostname,
             "type": DNSTypes.get_type_name(query_code)
         }
-        #print(message["trans_id"])
-        # test prints
-        #print(dataq)
-        #print(serialize(dataq))
-
 
         connection.send_message(message, local_dns_address)
         response, address = connection.receive_message()
-        #print(repr(response["result"]))
+
+
         if(response["result"].rstrip('\x00') == "NXDOMAIN"): #check to see if its a non-existant domain. remove null termator
             print("Record Not Found")
             
@@ -57,17 +53,28 @@ def main():
         connection.bind(client_address)
 
         while True:
-            input_value = input("Enter the hostname (or type 'quit' to exit) ")
-            if input_value.lower() == "quit":
-                break
-
-            hostname = input_value
-            query_code = DNSTypes.get_type_code("A")
-
+            hostname = ""  # Declaring this here- hopefully it'll get correctly updated in the loop
+            # Python scoping is annoying
+            code = ""  # Query type starts as empty string so we enter the
+            # input checking loop
             # For extra credit, let users decide the query type (e.g. A, AAAA, NS, CNAME)
-            # This means input_value will be two values separated by a space
+            while code.upper() not in ["A", "AAAA", "NS", "CNAME"]:
+                input_value = input("Enter the hostname followed by query type (or type 'quit' to exit) ")
+                if input_value.lower() == "quit":
+                    return
 
-            handle_request(hostname,query_code,records, num, connection)
+                delimitIdx = input_value.find(' ')  # Finds where to separate user input
+                # Break user input int hostname and query type
+                hostname = input_value[0:delimitIdx]  # selects from beginning of string to char before space
+                code = input_value[delimitIdx + 1:]  # selects from char after space thru end of string
+
+                # Have to check this here so we don't show error message
+                # on the first iteration (before the user has typed anything)
+                if code.upper() not in ["A", "AAAA", "NS", "CNAME"]:
+                    print("Error: Query type must be A, AAAA, NS, or CNAME")
+
+            query_code = DNSTypes.get_type_code(code.upper())
+            handle_request(hostname, query_code, records, num, connection)
 
     except KeyboardInterrupt:
         print("Keyboard interrupt received, exiting...")

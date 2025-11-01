@@ -15,23 +15,12 @@ def listen(connection, record_table):
             # Wait for query
             message, received_address = connection.receive_message()
 
-            # # testing insert
-            # message = {
-            #     "trans_id": 4856,
-            #     "flag": "QUERY",
-            #     "name": "shop.amazone.com",
-            #     "type": "A"
-            # }
-
             if message:
                 # query case
                 if message["flag"] == "QUERY":
                     # get record and store
                     print("Attempting to fetch record for: " + message["name"])
                     record = record_table.get_record(message["name"])
-
-                    # test print
-                    #print(record)
 
                     # check if record does not exist in localserver
                     if not record or not record["type"] == 'A':
@@ -46,6 +35,13 @@ def listen(connection, record_table):
                         # find authoritative server for query
                         if record_table.get_record(domain_name) == None:
                             response = {"name": message["name"], "type": "A", "result": "NXDOMAIN", "ttl": "NONE", "static": 1}
+
+                        #test
+                        elif message["type"] == "NS":
+                            response = record_table.get_record(domain_name)
+                            message["name"] = domain_name
+
+
                         else:
                             authoritative_server_name = record_table.get_record(domain_name)["result"]
                             authoritative_server_address = record_table.get_record(authoritative_server_name)["result"]
@@ -95,7 +91,6 @@ def main():
         record_table.add_record(record)
 
     # set address and socket for this server
-    print(get_local_ip())
     local_dns_address = (get_local_ip(), 21000)
     # Bind address to UDP socket
     connection = UDPConnection()
@@ -116,16 +111,6 @@ def main():
         "ttl" : 60,
         "result": "125.134.1.1"
     }
-
-###########TESTING CASES############
-    #print(query_message)
-    #print(serialize(query_message))
-    #print(deserialize(serialize(query_message)))
-
-    #print(response_message)
-    #print(serialize(response_message))
-    #print(deserialize(serialize(response_message)))
-######################################
 
     # Start socket
     listen(connection, record_table)
